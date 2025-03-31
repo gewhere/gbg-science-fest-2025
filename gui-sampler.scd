@@ -54,3 +54,49 @@ f.openRead(p);
 sf.soundfile = f;
 sf.read(0, f.numFrames);
 )
+
+
+
+/// PITCHED ENVELOPE SAMPLING
+
+(
+var p = Platform.resourceDir +/+ "sounds/a11wlk01.wav";
+var b = Buffer.read(s, p);
+var f, sf, window, knob, knobRate, knobImpulse, button, size = 32;
+var knobL0, knobL1, knobL2, knobT1;
+//var bufferLength = b.numFrames;
+var x = SynthDef(\help_Buffer, { arg out = 0, rate=1, imp=1, startPos=0, bufnum, rst=0, lp=1, l0=1, l1=1, l2=1, l3=1, t0=0.05, t1=0.9;
+	var env, pitchedEnv, signal, impulse;
+	impulse = Impulse.kr(imp);
+	env = EnvGen.ar(Env.new(levels: [0, 1, 0.9, 0], times: [0.05, 0.35, 0.15], curve: [-5, 0, -5]), impulse);
+	pitchedEnv = EnvGen.ar(Env.new(levels: [l0, l1, l2, l3], times: [t0, t1-(2*t0), t0], curve: [-5, 0, -5]), impulse);
+	signal = BufRd.ar(1, bufnum, Phasor.ar(impulse, BufRateScale.kr(bufnum) * rate * pitchedEnv, startPos, BufFrames.kr(bufnum), resetPos: rst), loop: lp)!2;
+	signal = signal * env;
+    Out.ar(out, signal)
+}).play(s,[\bufnum, b]);
+window = Window.new("Sampler", Rect(350,350,400,200)).front;
+window.background = Color.fromHexString("#555555");
+window.onClose_{ x.free; b.free; };
+knob = Knob.new(window, Rect(10,160,size,size));
+knob.action_{ |v| postf("value: %\n", v.value); x.set(\startPos, v.value * b.numFrames); };
+knobRate = Knob.new(window, Rect(60,160,size,size));
+knobRate.action_{ |v| postf("value: %\n", v.value); x.set(\rate, (2 * v.value) - 1); };
+knobImpulse = Knob.new(window, Rect(110,160,size,size));
+knobImpulse.action_{ |v| postf("value: %\n", v.value); x.set(\imp, 10 * v.value); };
+knobL1 = Knob.new(window, Rect(10,120,size,size));
+knobL1.action_{ |v| postf("value: %\n", v.value); x.set(\l1, v.value); };
+knobL2 = Knob.new(window, Rect(60,120,size,size));
+knobL2.action_{ |v| postf("value: %\n", v.value); x.set(\l2, v.value); };
+knobT1 = Knob.new(window, Rect(110,120,size,size));
+knobT1.action_{ |v| postf("value: %\n", v.value); x.set(\t1, v.value); };
+button = Button.new(window, Rect(320,160,30,30));
+button.states = [["OFF", Color.white, Color.red], ["ON", Color.black, Color.green]];
+button.action_{ |v| v.value.postln;
+		x.set(\imp, v.value);
+};
+sf = SoundFileView.new(window, Rect(20,20,360,100));
+f = SoundFile.new;
+f.openRead(p);
+sf.soundfile = f;
+sf.read(0, f.numFrames);
+)
