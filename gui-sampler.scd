@@ -100,3 +100,62 @@ f.openRead(p);
 sf.soundfile = f;
 sf.read(0, f.numFrames);
 )
+
+// MIDI + GUI
+
+
+(
+var p = Platform.resourceDir +/+ "sounds/a11wlk01.wav";
+var b = Buffer.read(s, p);
+var f, sf, window, knob, knobRate, knobImpulse, button, size = 32;
+var knobL0, knobL1, knobL2, knobT1;
+//var bufferLength = b.numFrames;
+~synth = SynthDef(\help_Buffer, { arg out = 0, rate=1, imp=1, startPos=0, bufnum, rst=0, lp=1, l0=1, l1=1, l2=1, l3=1, t0=0.05, t1=0.9;
+	var env, pitchedEnv, signal, impulse;
+	impulse = Impulse.kr(imp);
+	env = EnvGen.ar(Env.new(levels: [0, 1, 0.9, 0], times: [0.05, 0.35, 0.15], curve: [-5, 0, -5]), impulse);
+	pitchedEnv = EnvGen.ar(Env.new(levels: [l0, l1, l2, l3], times: [t0, t1-(2*t0), t0], curve: [-5, 0, -5]), impulse);
+	signal = BufRd.ar(1, bufnum, Phasor.ar(impulse, BufRateScale.kr(bufnum) * rate * pitchedEnv, startPos, BufFrames.kr(bufnum), resetPos: rst), loop: lp)!2;
+	signal = signal * env;
+    Out.ar(out, signal)
+}).play(s,[\bufnum, b]);
+// MIDI INIT
+MIDIClient.init;
+MIDIIn.connect(0, MIDIClient.sources.at(1));
+// GUI INIT
+window = Window.new("Sampler", Rect(350,350,400,200)).front;
+window.background = Color.fromHexString("#555555");
+window.onClose_{ ~synth.free; b.free; };
+knobL2 = Knob.new(window, Rect(10,160,size,size));
+knobT1 = Knob.new(window, Rect(60,160,size,size));
+knobRate = Knob.new(window, Rect(110,160,size,size));
+knobImpulse = Knob.new(window, Rect(160,160,size,size));
+MIDIFunc.cc({ arg ...args;
+	args.postln;
+	if(args[1] == 17){
+		var midi_val = args[0]/127;
+		~synth.set(\imp, midi_val * 10);
+		{ knobImpulse.value_(midi_val) }.defer;
+	};
+	if(args[1] == 16){
+		var midi_val = args[0]/127;
+		~synth.set(\rate, (2 * midi_val) - 1);
+		{ knobRate.value_(midi_val) }.defer;
+	};
+	if(args[1] == 15){
+		var midi_val = args[0]/127;
+		~synth.set(\t1, midi_val);
+		{ knobT1.value_(midi_val) }.defer;
+	};
+	if(args[1] == 14){
+		var midi_val = args[0]/127;
+		~synth.set(\l2, midi_val);
+		{ knobL2.value_(midi_val) }.defer;
+	};
+}, [14, 15, 16, 17]); // match cc 1
+sf = SoundFileView.new(window, Rect(20,20,360,100));
+f = SoundFile.new;
+f.openRead(p);
+sf.soundfile = f;
+sf.read(0, f.numFrames);
+)
