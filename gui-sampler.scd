@@ -1251,3 +1251,76 @@ MIDIClient.sources.at(1)
 MIDISampler.new(MIDIClient.sources.at(1), ~dict, ~src, ~mod, ~fx, ~buffer, ~buffer.numFrames, ~sample_pwd);
 
 ~src.free; ~gated.free; ~fx.free; ~buffer.free;
+
+
+
+// TIME CURSOR WORKING
+
+s.options.memSize = 2**18;
+s.boot;
+FreqScope.new;
+s.meter;
+s.volume.gui;
+Stethoscope.new;
+scope(s).style=2
+
+~pwd = "/Users/geodia/data/recordings";
+~date = Date.getDate.format("%Y-%m-%d-%H%M").asString;
+~sample_pwd = "/Users/geodia/data/samples/train-noise-5sec-mono.wav";
+~buffer = Buffer.read(s, ~sample_pwd);
+~buffer.numFrames
+~buffer
+
+b = Bus.audio(s, 2);
+c = Bus.audio(s, 2);
+q = Bus.control(s, 1);
+b.index;
+c.index;
+q.index;
+
+Help.gui;
+
+
+(
+SynthDef(\snd, { arg out, bufnum=0, imp=0, rate=1, startPos=0, lp=0, l0=1, l1=1, l2=1, l3=1, t0=0.05, t1=0.9, updateRate=10;
+	var env, pitchedEnv, signal, phasor;
+	env = EnvGen.ar(Env.new(levels: [0, 1, 0.9, 0], times: [0.05, 4.90, 0.05], curve: [-5, 0, -5]), gate: imp);
+	pitchedEnv = EnvGen.ar(Env.new(levels: [l0, l1, l2, l3], times: [t0, t1-(2*t0), t0], curve: [-5, 0, -5]), gate: imp);
+	phasor = Phasor.ar(imp, BufRateScale.kr(bufnum) * rate * pitchedEnv, 0, BufFrames.kr(bufnum));
+	signal = BufRd.ar(1, bufnum, phasor, loop: lp) * env;
+	SendReply.kr(Impulse.kr(updateRate), "/bufPos", [phasor, signal]);
+	// signal = PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum), trig);
+	Out.kr(\ctrlbus.index, A2K.kr(phasor));
+    Out.ar(out, Pan2.ar(signal))
+}).add;
+SynthDef(\snd_gated, { arg inBus, outBus, modFreq = 1;
+    Out.ar(outBus, In.ar(inBus, 2) * SinOsc.kr(modFreq))
+}).add;
+SynthDef(\snd_fx, { arg inBus, outBus, cutoff = 2300, rq = 0.5;
+    Out.ar(
+        outBus,
+        RLPF.ar(In.ar(inBus, 2), cutoff, rq)
+    )
+}).add;
+)
+
+~src = Synth(\snd, args: [\out, c, \bufnum, ~buffer, \ctrlbus, q]);
+~mod = Synth(\snd_gated, args: [\outBus, b, \inBus, c], target: ~src, addAction: \addAfter);
+~fx = Synth(\snd_fx, args: [\outBus, 0, \inBus, b], target: ~mod, addAction: \addAfter);
+
+~fx.set(\cutoff, 10000)
+~src.set(\imp, 0)
+~src.set(\imp, 0, \lp, 0, \rst, 0)
+~src.set(\imp, 0, \lp, 0, \rst, 1)
+
+~src.set(\imp, 1)
+~src.set(\imp, 0)
+
+
+~dict = Dictionary.new;
+~dict[\knobs] = ["l2", "t1", "rate", "--", "--", "AM", "cutoff", "rq"];
+MIDIClient.init;
+MIDIClient.sources.at(1)
+MIDISampler.new(MIDIClient.sources.at(1), ~dict, ~src, ~mod, ~fx, ~buffer, ~buffer.numFrames, ~sample_pwd);
+
+~src.free; ~gated.free; ~fx.free; ~buffer.free;
