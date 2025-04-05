@@ -122,8 +122,9 @@ MIDISampler {
 	}
 
 	makeButton {
-		button = Button.new(window, Rect(100,height-160,60,60));
-		button.states = [["OFF", Color.white, Color.red], ["ON", Color.black, Color.green]];
+		button = Button.new(window, Rect(100,height-100,60,60));
+		button.states = [["PLAY", Color.white, Color.red], ["PLAY", Color.black, Color.green]];
+		button.font = Font("Monaco", font_size);
 	}
 
 	midiConnections{ | dict, synth, mod, fx, buffer, numframes |
@@ -147,21 +148,22 @@ MIDISampler {
 			};
 			if(args[1] == 73){
 				var midi_val = args[0]/127;
-				var start_val = (midi_val * numframes).asInteger;
-				"start_val: ".post; start_val.postln;
-				synth.set(\startPos, start_val);
+				//var start_val = (midi_val * numframes).asInteger;
+				//"start_val: ".post; start_val.postln;
+				var g = ControlSpec(1, 10, \lin, step: 1);
+				">> g.map(midi_val) = ".post; g.map(midi_val).postln;
+				synth.set(\amt, g.map(midi_val));
 				{ knob_4.value_(midi_val) }.defer;
 			};
 			if(args[1] == 74){
 				var midi_val = args[0]/127;
-				// ~synth.set(\startPos, midi_val * ~buffer.numFrames);
-				//fx.set(\cutoff, midi_val * 10000);
-				//fx.set(\rq, 1.02 - midi_val);
+				//var g = ControlSpec(0.001, 1.0, \exp);
+				//fx.set(\ffreq, g.map(midi_val) * 1000);
 				{ knob_5.value_(midi_val) }.defer;
 			};
 			if(args[1] == 75){
 				var midi_val = args[0]/127;
-				var g = ControlSpec(0.001, 1.0, \exp, 0.001, 1.0);
+				var g = ControlSpec(0.001, 1.0, \exp);
 				// 	linexp { arg inMin, inMax, outMin, outMax, clip = \minmax;
 				mod.set(\modFreq, g.map(midi_val) * 100);
 				{ knob_6.value_(midi_val) }.defer;
@@ -234,7 +236,7 @@ MIDISampler {
 			//var pos = (msg[3] / numframes);
 			var val = msg[3].asInteger;
 			// "position = ".post; val.postln;
-			">> OSC: ".post; msg.postln;
+			//">> OSC: ".post; msg.postln;
 			{
 				{
 					if(msg[4] != 0.0){
