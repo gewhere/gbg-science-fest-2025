@@ -12,10 +12,10 @@
 
 MIDISampler {
 
-	var <>midiDevice, <>dict, <>synth;
+	var <>midiDevice, <>dict, <>synth, <>osc;
 	var <>mod, <>fx, <>buffer;
 	var <window;
-	var <freqAnalyzer, <spectroGram, <sf, <sfv;
+	var <freqAnalyzer, <spectroGram, <sf, <sfview;
 	var <>width=800, <>height=500;
 	var <>knob_text_1, <>knob_text_2, <>knob_text_3, <>knob_text_4, <>knob_text_5, <>knob_text_6, <>knob_text_7, <>knob_text_8;
 	var <>knob_1, <>knob_2, <>knob_3, <>knob_4, <>knob_5, <>knob_6, <>knob_7, <>knob_8;
@@ -25,41 +25,45 @@ MIDISampler {
 	var <>font_size = 14;
 
 
-	*new { | midiDevice, dict, synth, mod, fx, buffer, numframes, path |
-		^super.new.init(midiDevice, dict, synth, mod, fx, buffer, numframes, path)
+	*new { | midiDevice, dict, synth, mod, fx, buffer, numframes, path, ctrlBus |
+		^super.new.init(midiDevice, dict, synth, mod, fx, buffer, numframes, path, ctrlBus)
 		// ^super.newCopyArgs(midiDevice, dict, synth, buffer)
 	}
 
-	init { | midiDevice, dict, synth, mod, fx, buffer, numframes, path |
+	init { | midiDevice, dict, synth, mod, fx, buffer, numframes, path, ctrlBus |
 		MIDIClient.init;
 		// midiDevice => MIDIClient.sources.at(1)
 		MIDIIn.connect(0, midiDevice);
-		this.makeWindow(numframes, path);
+		this.makeWindow(buffer, numframes, path, ctrlBus);
 		this.makeKnobs(dict);
 		this.makeButton;
 		this.midiConnections(dict, synth, mod, fx, buffer);
 	}
 
-	makeWindow { | numframes, path |
+	makeWindow { | buffer, numframes, path, ctrlBus |
 		var local_height = 100;
 
-		window = Window.new("Sampler", Rect(500, 500, width, height)).front;
+		window = Window.new("Sampler", Rect(500, 500, width, height), resizable: false).front;
 		window.background = Color.fromHexString("#555555");
 		freqAnalyzer = FreqScopeView(window, Rect(20, 20, width-50, local_height));
 		freqAnalyzer.active_(true);
 		spectroGram = Spectrogram.new(window, Rect(20, 20 + local_height + 5, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
 		spectroGram.start;
 
-		sfv = SoundFileView.new(window, Rect(20,20 + (2 * local_height) + 10, width-50, local_height));
+		sfview = SoundFileView.new(window, Rect(20,20 + (2 * local_height) + 10, width-50, local_height));
 		sf = SoundFile.new;
 		sf.openRead(path);
-		sfv.soundfile = sf;
-		sfv.read(0, sf.numFrames);
-		sfv.timeCursorOn = true;          // a settable cursor
-		sfv.timeCursorPosition = 2050;    // position is in frames.
-		sfv.timeCursorColor = Color.red;
+		sfview.soundfile = sf;
+		sfview.read(0, sf.numFrames);
+		sfview.timeCursorOn = true;          // a settable cursor
+		//sfview.timeCursorPosition = 0;    // position is in frames.
+		sfview.timeCursorColor = Color.red;
+		// scroll to position
+		//sfview.scrollTo(posData[0]);
 
 		window.onClose = { this.windowClosed };
+
+		^this.getTimeCursor(buffer, numframes, ctrlBus)
 	}
 
 	makeKnobs { | dict |
@@ -204,10 +208,52 @@ MIDISampler {
 		}, (36 .. 43));
 	}
 
+	getTimeCursor{ | buffer, numframes, ctrlBus |
+		// AppClock.sched(0.0, {
+		// 	ctrlBus.get({arg val; { sfview.timeCursorPosition = val.asInteger; "timeCursor = ".post; val.postln; }.defer;});
+		// 	//ctrlBus.get({arg val; { sfview.timeCursorPosition = buffer.getSynchronous(); "timeCursor = ".post; val.postln; }.defer;});
+		// 	0.05;
+		// });
+		//
+
+		// {
+		// 	{ sfview.timeCursorPosition = buffer.getSynchronous() }.defer;
+		// }.fork(AppClock)
+
+		// osc = OSCdef(\messaging, {|msg|
+		// 	//var pos = (msg[3] / numframes);
+		// 	var val = msg[3].asInteger;
+		// 	// "position = ".post; val.postln;
+		// 	">> OSC: ".post; msg.postln;
+		// 	{
+		// 		{ sfview.timeCursorPosition = val; "timeCursor = ".post; val.postln; }.defer;
+		// 	}.fork(AppClock)
+		// }, "/bufPos");
+
+		osc = OSCdef(\messaging, {|msg|
+			//var pos = (msg[3] / numframes);
+			var val = msg[3].asInteger;
+			// "position = ".post; val.postln;
+			">> OSC: ".post; msg.postln;
+			{
+				{
+					if(msg[4] != 0.0){
+						sfview.timeCursorPosition = val; "timeCursor = ".post; val.postln;
+					}{
+						sfview.timeCursorPosition = 0;
+					}
+				}.defer;
+			}.fork(AppClock)
+		}, "/bufPos");
+
+	}
+
 	windowClosed {
 		synth.free;
 		buffer.free;
 		freqAnalyzer.kill;
 		spectroGram.stop;
+		osc.free;
+		AppClock.clear;
 	}
 }
