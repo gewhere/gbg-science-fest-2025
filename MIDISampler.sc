@@ -12,11 +12,10 @@
 
 MIDISampler {
 
-	// var <>akai;
-	//var <>midiDevice, <>dict, <>synth;
-	//var <>mod, <>fx, <>buffer;
+	var <>midiDevice, <>dict, <>synth;
+	var <>mod, <>fx, <>buffer;
 	var <window;
-	var <freqAnalyzer, <spectroGram;
+	var <freqAnalyzer, <spectroGram, <sf, <sfv;
 	var <>width=800, <>height=500;
 	var <>knob_text_1, <>knob_text_2, <>knob_text_3, <>knob_text_4, <>knob_text_5, <>knob_text_6, <>knob_text_7, <>knob_text_8;
 	var <>knob_1, <>knob_2, <>knob_3, <>knob_4, <>knob_5, <>knob_6, <>knob_7, <>knob_8;
@@ -26,30 +25,40 @@ MIDISampler {
 	var <>font_size = 14;
 
 
-	*new { | midiDevice, dict, synth, mod, fx, buffer, numframes |
-		^super.new.init(midiDevice, dict, synth, mod, fx, buffer, numframes)
+	*new { | midiDevice, dict, synth, mod, fx, buffer, numframes, path |
+		^super.new.init(midiDevice, dict, synth, mod, fx, buffer, numframes, path)
 		// ^super.newCopyArgs(midiDevice, dict, synth, buffer)
 	}
 
-	init { | midiDevice, dict, synth, mod, fx, buffer, numframes |
+	init { | midiDevice, dict, synth, mod, fx, buffer, numframes, path |
 		MIDIClient.init;
 		// midiDevice => MIDIClient.sources.at(1)
 		MIDIIn.connect(0, midiDevice);
-		this.makeWindow;
+		this.makeWindow(numframes, path);
 		this.makeKnobs(dict);
 		this.makeButton;
 		this.midiConnections(dict, synth, mod, fx, buffer);
 	}
 
-	makeWindow {
+	makeWindow { | numframes, path |
 		var local_height = 100;
 
 		window = Window.new("Sampler", Rect(500, 500, width, height)).front;
 		window.background = Color.fromHexString("#555555");
 		freqAnalyzer = FreqScopeView(window, Rect(20, 20, width-50, local_height));
 		freqAnalyzer.active_(true);
-		spectroGram = Spectrogram.new(window, Rect(20, 20 + 100, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
+		spectroGram = Spectrogram.new(window, Rect(20, 20 + local_height + 5, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
 		spectroGram.start;
+
+		sfv = SoundFileView.new(window, Rect(20,20 + (2 * local_height) + 10, width-50, local_height));
+		sf = SoundFile.new;
+		sf.openRead(path);
+		sfv.soundfile = sf;
+		sfv.read(0, sf.numFrames);
+		sfv.timeCursorOn = true;          // a settable cursor
+		sfv.timeCursorPosition = 2050;    // position is in frames.
+		sfv.timeCursorColor = Color.red;
+
 		window.onClose = { this.windowClosed };
 	}
 
@@ -142,23 +151,27 @@ MIDISampler {
 			if(args[1] == 74){
 				var midi_val = args[0]/127;
 				// ~synth.set(\startPos, midi_val * ~buffer.numFrames);
-				fx.set(\cutoff, midi_val * 10000);
-				fx.set(\rq, 1.02 - midi_val);
+				//fx.set(\cutoff, midi_val * 10000);
+				//fx.set(\rq, 1.02 - midi_val);
 				{ knob_5.value_(midi_val) }.defer;
 			};
 			if(args[1] == 75){
 				var midi_val = args[0]/127;
-				mod.set(\modFreq, midi_val * 100);
+				var g = ControlSpec(0.001, 1.0, \exp, 0.001, 1.0);
+				// 	linexp { arg inMin, inMax, outMin, outMax, clip = \minmax;
+				mod.set(\modFreq, g.map(midi_val) * 100);
 				{ knob_6.value_(midi_val) }.defer;
 			};
 			if(args[1] == 76){
 				var midi_val = args[0]/127;
-				fx.set(\cutoff, midi_val * 10000 + 1);
+				var g = ControlSpec(0.001, 1.0, \exp, 0.001, 1.0);
+				fx.set(\cutoff, g.map(midi_val) * 10000 + 1);
 				{ knob_7.value_(midi_val) }.defer;
 			};
 			if(args[1] == 77){
 				var midi_val = args[0]/127;
-				fx.set(\rq, 1.03 - midi_val);
+				//var g = ControlSpec(0.001, 1.0, \exp, 0.001, 1.0);
+				fx.set(\rq, midi_val);
 				{ knob_8.value_(midi_val) }.defer;
 			};
 		}, (70 .. 77)); // match cc 1
