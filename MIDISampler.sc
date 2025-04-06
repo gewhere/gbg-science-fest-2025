@@ -2,18 +2,18 @@
 	~dict = Dictionary.new;
 	~dict[\knobs] = ["aa", "bb", "ccc", "ddd", "eee", "ffff", "ggg", "hhhh"];
 	~synth= <SYNTH HERE>;
-	~buffer= <BUFFER HERE>;
+	~buffers= <BUFFER HERE>;
 
 	MIDIClient.init;
 	MIDIClient.sources.at(1)
 
-	MIDISampler.new(MIDIClient.sources.at(1), ~dict, ~synth, ~buffer);
+	MIDISampler.new(MIDIClient.sources.at(1), ~dict, ~synth, ~buffers);
 */
 
 MIDISampler {
 
 	var <>midiDevice, <>dict, <>synth, <>osc;
-	var <>mod, <>fx, <>buffer;
+	var <>mod, <>fx, <>buffers;
 	var <window;
 	var <freqAnalyzer, <spectroGram, <sf, <sfview;
 	var <>width=800, <>height=500;
@@ -25,34 +25,35 @@ MIDISampler {
 	var <>font_size = 14;
 
 
-	*new { | midiDevice, dict, synth, mod, fx, buffer, numframes, path, ctrlBus |
-		^super.new.init(midiDevice, dict, synth, mod, fx, buffer, numframes, path, ctrlBus)
-		// ^super.newCopyArgs(midiDevice, dict, synth, buffer)
+	*new { | midiDevice, dict, synth, mod, fx, buffers |
+		^super.new.init(midiDevice, dict, synth, mod, fx, buffers)
+		// ^super.newCopyArgs(midiDevice, dict, synth, buffers)
 	}
 
-	init { | midiDevice, dict, synth, mod, fx, buffer, numframes, path, ctrlBus |
+	init { | midiDevice, dict, synth, mod, fx, buffers |
 		MIDIClient.init;
 		// midiDevice => MIDIClient.sources.at(1)
 		MIDIIn.connect(0, midiDevice);
-		this.makeWindow(buffer, numframes, path, ctrlBus);
+		this.makeWindow(synth, buffers);
 		this.makeKnobs(dict);
 		this.makeButton;
-		this.midiConnections(dict, synth, mod, fx, buffer);
+		this.midiConnections(dict, synth, mod, fx, buffers);
 	}
 
-	makeWindow { | buffer, numframes, path, ctrlBus |
+	makeWindow { | synth, buffers |
 		var local_height = 100;
+		var popupMenu;
 
 		window = Window.new("Sampler", Rect(500, 500, width, height), resizable: false).front;
 		window.background = Color.fromHexString("#555555");
-		freqAnalyzer = FreqScopeView(window, Rect(20, 20, width-50, local_height));
+		freqAnalyzer = FreqScopeView(window, Rect(40, 40, width-50, local_height));
 		freqAnalyzer.active_(true);
-		spectroGram = Spectrogram.new(window, Rect(20, 20 + local_height + 5, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
+		spectroGram = Spectrogram.new(window, Rect(40, 40 + local_height + 5, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
 		spectroGram.start;
 
-		sfview = SoundFileView.new(window, Rect(20,20 + (2 * local_height) + 10, width-50, local_height));
+		sfview = SoundFileView.new(window, Rect(40, 40 + (2 * local_height) + 10, width-50, local_height));
 		sf = SoundFile.new;
-		sf.openRead(path);
+		sf.openRead(buffers[0].path); // initialize path
 		sfview.soundfile = sf;
 		sfview.read(0, sf.numFrames);
 		sfview.timeCursorOn = true;          // a settable cursor
@@ -60,10 +61,30 @@ MIDISampler {
 		sfview.timeCursorColor = Color.red;
 		// scroll to position
 		//sfview.scrollTo(posData[0]);
+		popupMenu = PopUpMenu(window, Rect(10, 10, 180, 20));
+		// popupMenu.items = [
+		// 	"/Users/geodia/data/samples/train-noise-5sec-mono.wav",
+		// 	"/Users/geodia/data/samples/t-square-wave-1sec.wav"
+		// ];
+		//popupMenu.items = buffers; // this works
+		popupMenu.items = buffers collect: { |buffer| buffer.path };
+		popupMenu.background_(Color.cyan(0.3));  // only changes the look of displayed item
+		popupMenu.stringColor_(Color.black);   // only changes the look of displayed item
+		popupMenu.font_(Font("Courier", 13));   // only changes the look of displayed item
+		popupMenu.action = { |menu|
+			var path = menu.item;
+			">> PopUp Action: "[menu.value, path].postln;
+			// Update soundfile view
+			sf.openRead(path);
+			sfview.soundfile = sf;
+			sfview.read(0, sf.numFrames);
+			format("BUFFERS: %, NUMFRAMES: %", buffers[menu.value], buffers[menu.value].numFrames).postln;
+			synth.set(\bufnum, buffers[menu.value], \numframes, buffers[menu.value].numFrames);
+		};
 
 		window.onClose = { this.windowClosed };
 
-		^this.getTimeCursor(buffer, numframes, ctrlBus)
+		^this.getTimeCursor(buffers)
 	}
 
 	makeKnobs { | dict |
@@ -127,7 +148,7 @@ MIDISampler {
 		button.font = Font("Monaco", font_size);
 	}
 
-	midiConnections{ | dict, synth, mod, fx, buffer, numframes |
+	midiConnections{ | dict, synth, mod, fx, buffers |
 		// KNOB CONTROLS
 		MIDIFunc.cc( { arg ...args;
 			args.postln;
@@ -158,14 +179,14 @@ MIDISampler {
 			if(args[1] == 74){
 				var midi_val = args[0]/127;
 				//var g = ControlSpec(0.001, 1.0, \exp);
-				//fx.set(\ffreq, g.map(midi_val) * 1000);
+				fx.set(\f1, midi_val);
 				{ knob_5.value_(midi_val) }.defer;
 			};
 			if(args[1] == 75){
 				var midi_val = args[0]/127;
 				var g = ControlSpec(0.001, 1.0, \exp);
 				// 	linexp { arg inMin, inMax, outMin, outMax, clip = \minmax;
-				mod.set(\modFreq, g.map(midi_val) * 100);
+				mod.set(\modFreq, g.map(midi_val) * 75);
 				{ knob_6.value_(midi_val) }.defer;
 			};
 			if(args[1] == 76){
@@ -210,28 +231,7 @@ MIDISampler {
 		}, (36 .. 43));
 	}
 
-	getTimeCursor{ | buffer, numframes, ctrlBus |
-		// AppClock.sched(0.0, {
-		// 	ctrlBus.get({arg val; { sfview.timeCursorPosition = val.asInteger; "timeCursor = ".post; val.postln; }.defer;});
-		// 	//ctrlBus.get({arg val; { sfview.timeCursorPosition = buffer.getSynchronous(); "timeCursor = ".post; val.postln; }.defer;});
-		// 	0.05;
-		// });
-		//
-
-		// {
-		// 	{ sfview.timeCursorPosition = buffer.getSynchronous() }.defer;
-		// }.fork(AppClock)
-
-		// osc = OSCdef(\messaging, {|msg|
-		// 	//var pos = (msg[3] / numframes);
-		// 	var val = msg[3].asInteger;
-		// 	// "position = ".post; val.postln;
-		// 	">> OSC: ".post; msg.postln;
-		// 	{
-		// 		{ sfview.timeCursorPosition = val; "timeCursor = ".post; val.postln; }.defer;
-		// 	}.fork(AppClock)
-		// }, "/bufPos");
-
+	getTimeCursor{ | buffers |
 		osc = OSCdef(\messaging, {|msg|
 			//var pos = (msg[3] / numframes);
 			var val = msg[3].asInteger;
@@ -252,7 +252,7 @@ MIDISampler {
 
 	windowClosed {
 		synth.free;
-		buffer.free;
+		buffers.free;
 		freqAnalyzer.kill;
 		spectroGram.stop;
 		osc.free;
