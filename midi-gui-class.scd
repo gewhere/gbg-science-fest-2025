@@ -1,3 +1,5 @@
+// WORKING EXAMPLE
+
 s.options.memSize = 2**18;
 s.boot;
 FreqScope.new;
