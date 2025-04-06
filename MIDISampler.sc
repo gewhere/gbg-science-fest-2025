@@ -19,7 +19,7 @@ MIDISampler {
 	var <>width=800, <>height=500;
 	var <>knob_text_1, <>knob_text_2, <>knob_text_3, <>knob_text_4, <>knob_text_5, <>knob_text_6, <>knob_text_7, <>knob_text_8;
 	var <>knob_1, <>knob_2, <>knob_3, <>knob_4, <>knob_5, <>knob_6, <>knob_7, <>knob_8;
-	var <>button;
+	var <>button, <>slider;
 	var <>size=50;
 	var <>knobSize=40;
 	var <>font_size = 14;
@@ -37,6 +37,7 @@ MIDISampler {
 		this.makeWindow(synth, buffers);
 		this.makeKnobs(dict);
 		this.makeButton;
+		this.makeSlider;
 		this.midiConnections(dict, synth, mod, fx, buffers);
 	}
 
@@ -69,7 +70,7 @@ MIDISampler {
 		popupMenu.font_(Font("Courier", 13));   // only changes the look of displayed item
 		popupMenu.action = { |menu|
 			var path = Platform.userHomeDir ++ "/samples" +/+ menu.item ++ ".wav";
-			">> PopUp Action: "[menu.value, path].postln;
+			">> PopUp Action: ".post; [menu.value, path].postln;
 			// Update soundfile view
 			sf.openRead(path);
 			sfview.soundfile = sf;
@@ -144,6 +145,11 @@ MIDISampler {
 		button.font = Font("Monaco", font_size);
 	}
 
+	makeSlider {
+		slider = Slider2D.new(window, Rect(300,height-100,80,80));
+		//slider.setXY(1, 0.5);
+	}
+
 	midiConnections{ | dict, synth, mod, fx, buffers |
 		// KNOB CONTROLS
 		MIDIFunc.cc( { arg ...args;
@@ -182,7 +188,7 @@ MIDISampler {
 				var midi_val = args[0]/127;
 				var g = ControlSpec(0.001, 1.0, \exp);
 				// 	linexp { arg inMin, inMax, outMin, outMax, clip = \minmax;
-				mod.set(\modFreq, g.map(midi_val) * 75);
+				mod.set(\modFreq, g.map(midi_val) * 100);
 				{ knob_6.value_(midi_val) }.defer;
 			};
 			if(args[1] == 76){
@@ -197,7 +203,20 @@ MIDISampler {
 				fx.set(\rq, midi_val);
 				{ knob_8.value_(midi_val) }.defer;
 			};
-		}, (70 .. 77)); // match cc 1
+			if(args[1] == 1){
+				var midi_val = args[0]/127;
+				//var g = ControlSpec(0.001, 1.0, \exp, 0.001, 1.0);
+				fx.set(\l1, midi_val * 0.02);
+				{ slider.y_( (midi_val / 2) + 0.5 ) }.defer;
+			};
+		}, (70 .. 77) ++ 1); // JOYSTICK match cc 1 for Pitch Wheel
+		// == BEND == \\
+		MIDIFunc.new({ arg val, chan, src;
+			var midi_val = val[0] / 8192;
+			format("BEND [val, chan, src]: %", [val, chan, src]).postln;
+			fx.set(\freq, midi_val);
+			{ slider.x_(midi_val / 2) }.defer;
+		}, msgType: \bend); // JOYSTICK
 		// == BUTTONS == \\
 		// NOTEON
 		MIDIFunc.noteOn( { arg ...args;
