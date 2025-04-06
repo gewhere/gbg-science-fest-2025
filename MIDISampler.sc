@@ -46,12 +46,12 @@ MIDISampler {
 
 		window = Window.new("Sampler", Rect(500, 500, width, height), resizable: false).front;
 		window.background = Color.fromHexString("#555555");
-		freqAnalyzer = FreqScopeView(window, Rect(40, 40, width-50, local_height));
+		freqAnalyzer = FreqScopeView(window, Rect(20, 40, width-50, local_height));
 		freqAnalyzer.active_(true);
-		spectroGram = Spectrogram.new(window, Rect(40, 40 + local_height + 5, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
+		spectroGram = Spectrogram.new(window, Rect(20, 40 + local_height + 5, width-50, local_height), background:Color(0.05, 0.05, 0.05), color:Color.green, lowfreq:20, highfreq:4000);
 		spectroGram.start;
 
-		sfview = SoundFileView.new(window, Rect(40, 40 + (2 * local_height) + 10, width-50, local_height));
+		sfview = SoundFileView.new(window, Rect(20, 40 + (2 * local_height) + 10, width-50, local_height));
 		sf = SoundFile.new;
 		sf.openRead(buffers[0].path); // initialize path
 		sfview.soundfile = sf;
@@ -61,18 +61,14 @@ MIDISampler {
 		sfview.timeCursorColor = Color.red;
 		// scroll to position
 		//sfview.scrollTo(posData[0]);
-		popupMenu = PopUpMenu(window, Rect(10, 10, 180, 20));
-		// popupMenu.items = [
-		// 	"/Users/geodia/data/samples/train-noise-5sec-mono.wav",
-		// 	"/Users/geodia/data/samples/t-square-wave-1sec.wav"
-		// ];
-		//popupMenu.items = buffers; // this works
-		popupMenu.items = buffers collect: { |buffer| buffer.path };
+		popupMenu = PopUpMenu(window, Rect(20, 10, 180, 20));
+		//
+		popupMenu.items = buffers collect: { |buffer| buffer.path.fileNameWithoutExtension };
 		popupMenu.background_(Color.cyan(0.3));  // only changes the look of displayed item
 		popupMenu.stringColor_(Color.black);   // only changes the look of displayed item
 		popupMenu.font_(Font("Courier", 13));   // only changes the look of displayed item
 		popupMenu.action = { |menu|
-			var path = menu.item;
+			var path = Platform.userHomeDir ++ "/samples" +/+ menu.item ++ ".wav";
 			">> PopUp Action: "[menu.value, path].postln;
 			// Update soundfile view
 			sf.openRead(path);
